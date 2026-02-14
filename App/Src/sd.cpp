@@ -41,13 +41,5 @@ File SD::Open(const TCHAR* path, const FileMode mode)
         return File::Empty();
     }
 
-    FIL file;
-    const FRESULT res = f_open(&file, path, static_cast<BYTE>(mode));
-
-    if (res == FR_OK)
-    {
-        return File::Open(file);
-    }
-
-    return File::Empty();
+    return File::Open(path, static_cast<BYTE>(mode));
 }

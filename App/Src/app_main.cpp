@@ -3,8 +3,8 @@
 #include "visitor_counter.h"
 
 namespace {
-    constexpr const uint8_t sw1_exti_line = 0;
-    constexpr const uint8_t sw2_exti_line = 1;
+    constexpr const uint8_t sw1_exti_line = 1;
+    constexpr const uint8_t sw2_exti_line = 2;
 
     VisitorCounter visitor_counter;
 }

@@ -22,6 +22,7 @@ enum class FileMode : BYTE
 class SD
 {
     FATFS _fs;
+    FIL _file;
     bool _is_mounted = false;
 
 public:

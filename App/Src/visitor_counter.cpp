@@ -35,15 +35,29 @@ void VisitorCounter::ParseCommand()
     // 夏時間は無効
     t.tm_isdst = 0;
 
-    if (assign_args != 7)
+    if (assign_args == 1 && strcmp(command, command_get_time) == 0)
+    {
+        // 時刻取得コマンド
+        DateTime date_time = _pcf8563.Now();
+
+        char response[27];
+        snprintf(response, sizeof(response), "%4d/%2d/%2d %2d:%2d:%2d\n", date_time.GetYears(), date_time.GetMonths(), date_time.GetDays(), date_time.GetHours(), date_time.GetMinutes(), date_time.GetSeconds());
+        // 送信
+        Print(response);
+
+        return;
+    }
+    else if (assign_args != 7)
     {
         // 代入できた変数の個数が一致しない場合
+        Print("Invalid arguments.\n");
         return;
     }
 
     if (strcmp(command, command_set_time) != 0)
     {
         // コマンド名不一致
+        Print("Invalid command.\n");
         return;
     }
 
@@ -66,13 +80,22 @@ void VisitorCounter::ParseCommand()
         return;
     }
 
+    Print("RTC configure OK.\n");
+
     _time_set = true;
     // LED1 OFF
     _led1.Off();
 }
 
+void VisitorCounter::Print(const char* message)
+{
+    HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), uart_timeout);
+}
+
 void VisitorCounter::Begin()
 {
+    Print("Startup...\n");
+
     // LED1 ON
     _led1.OnContinuous();
     // LED2 ON
@@ -87,6 +110,7 @@ void VisitorCounter::Begin()
     if (_pcf8563.WasVoltageLow())
     {
         // 時刻未設定
+        Print("RTC is not configured time.\n");
         return;
     }
 
@@ -99,23 +123,29 @@ void VisitorCounter::Begin()
 
     if (sd_mount_result != FR_OK)
     {
+        Print("TF card can't mount.\n");
         return;
     }
 
     // 時刻を取得
     DateTime date_time = _pcf8563.Now();
     // ファイル名を生成
-    char file_name[20] = { 0 };
+    char file_name[21] = { 0 };
     snprintf(file_name, sizeof(file_name), "%04d_%02d_%02d.csv", date_time.GetYears(), date_time.GetMonths(), date_time.GetDays());
     // 日付の名前でファイルを開く (無ければ新規作成、末尾に追記)
     _file = _sd.Open(file_name, FileMode::OpenAppendReadWrite);
 
     if (_file.IsEmpty())
     {
-        return;
+        char message[50];
+        snprintf(message, sizeof(message), "%s is empty. Create new file.\n", file_name);
+        Print(message);
     }
 
     _file_opened = true;
+
+    Print("TF card init completed.\n");
+
     // LED2 OFF
     _led2.Off();
 }
@@ -133,8 +163,15 @@ void VisitorCounter::Update()
         memset(_command_buffer, 0, sizeof(_command_buffer));
     }
 
+    HAL_Delay(delay_ms);
+
+    _buzzer.Update(delay_ms);
+
+    _led1.Update(delay_ms);
+    _led2.Update(delay_ms);
+
     // SW1押した直後
-    if (_sw1_pressed && _sw1_pressed_ms == 0)
+    if (_sw1_pressed && _sw1_pressed_ms <= 0)
     {
         // LED1 ON
         _led1.On(led_sw_on_ms);
@@ -161,13 +198,6 @@ void VisitorCounter::Update()
         // CSV書き出し
         WriteCSVLine(date_time, csv_write_sw2);
     }
-
-    HAL_Delay(delay_ms);
-
-    _buzzer.Update(delay_ms);
-
-    _led1.Update(delay_ms);
-    _led2.Update(delay_ms);
 
     if (_sw1_pressed)
     {

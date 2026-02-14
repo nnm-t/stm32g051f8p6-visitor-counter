@@ -9,21 +9,20 @@
 
 class File
 {
-    FIL _file;
-    bool _is_empty;
+    FIL* _file;
 
-    File(FIL& file) : _file(file), _is_empty(false)
+    File(FIL* file) : _file(file)
     {
 
     }
 
-    File() : _file(FIL()), _is_empty(true)
+    File() : _file(nullptr)
     {
 
     }
 
 public:
-    static File Open(FIL& file);
+    static File Open(const TCHAR* path, const BYTE mode);
 
     static File Empty();
 

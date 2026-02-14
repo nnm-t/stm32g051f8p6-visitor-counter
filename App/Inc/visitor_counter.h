@@ -28,9 +28,11 @@ class VisitorCounter
     static constexpr const char* csv_write_sw1 = "1";
     static constexpr const char* csv_write_sw2 = "2";
     static constexpr const size_t uart_buffer_len = 16;
+    static constexpr const uint32_t uart_timeout = 100;
     static constexpr const size_t command_buffer_len = 128;
     static constexpr const char command_delimiter = '\n';
     static constexpr const char* command_set_time = "set";
+    static constexpr const char* command_get_time = "get";
 
     PCF8563 _pcf8563 = PCF8563(&hi2c2);
     Buzzer _buzzer = Buzzer(&htim14, TIM_CHANNEL_1, sw_buzzer_ms);
@@ -56,6 +58,8 @@ class VisitorCounter
     void WriteCSVLine(const DateTime& date_time, const char* str);
 
     void ParseCommand();
+
+    void Print(const char* message);
 
 public:
     VisitorCounter()

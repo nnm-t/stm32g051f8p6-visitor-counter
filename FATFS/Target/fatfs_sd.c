@@ -248,7 +248,7 @@ DSTATUS SD_disk_initialize(BYTE drv)
 
     uint8_t type = 0;
 
-    if (SD_send_cmd(CMD0, 0 == 1))
+    if (SD_send_cmd(CMD0, 0) == 1)
     {
         timer1 = 1000;
 

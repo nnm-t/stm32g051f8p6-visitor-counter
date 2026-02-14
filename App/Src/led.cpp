@@ -21,6 +21,7 @@ void LED::Off()
     _is_on = false;
     _is_continuous = false;
     _remaining_ms = 0;
+
     HAL_GPIO_WritePin(_port, _pin, GPIO_PIN_RESET);
 }
 
