@@ -173,6 +173,7 @@ void VisitorCounter::Update()
     // SW1押した直後
     if (_sw1_pressed && _sw1_pressed_ms <= 0)
     {
+        Print("SW1 Pressed.\n");
         // LED1 ON
         _led1.On(led_sw_on_ms);
 
@@ -187,7 +188,8 @@ void VisitorCounter::Update()
 
     if (_sw2_pressed && _sw2_pressed_ms == 0)
     {
-        // LED1 ON
+        Print("SW2 Pressed.\n");
+        // LED2 ON
         _led2.On(led_sw_on_ms);
 
         // ブザー鳴動
@@ -245,6 +247,8 @@ void VisitorCounter::SW2Pressed()
 
 void VisitorCounter::UARTRXComplete(UART_HandleTypeDef* const huart)
 {
+    HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
+
     if (huart != &huart1)
     {
         return;

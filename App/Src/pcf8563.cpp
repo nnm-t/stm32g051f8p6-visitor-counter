@@ -14,7 +14,7 @@ bool PCF8563::IsRunning()
 {
     // Control Status 1, Control Status 2
     uint8_t control_status[2];
-    const HAL_StatusTypeDef ret = HAL_I2C_Mem_Read(_i2c_handle, i2c_address, register_control_status_1, register_size, control_status, sizeof(control_status), i2c_timeout);
+    const HAL_StatusTypeDef ret = HAL_I2C_Mem_Read(_i2c_handle, i2c_read_address, register_control_status_1, register_size, control_status, sizeof(control_status), i2c_timeout);
 
     if (ret != HAL_OK)
     {
@@ -32,7 +32,7 @@ bool PCF8563::Begin()
 bool PCF8563::WasVoltageLow()
 {
     uint8_t value[1];
-    const HAL_StatusTypeDef ret = HAL_I2C_Mem_Read(_i2c_handle, i2c_address, register_vl_seconds, register_size, value, sizeof(value), i2c_timeout);
+    const HAL_StatusTypeDef ret = HAL_I2C_Mem_Read(_i2c_handle, i2c_read_address, register_vl_seconds, register_size, value, sizeof(value), i2c_timeout);
 
     if (ret != HAL_OK)
     {
@@ -45,7 +45,7 @@ bool PCF8563::WasVoltageLow()
 DateTime PCF8563::Now()
 {
     uint8_t value[7];
-    const HAL_StatusTypeDef ret = HAL_I2C_Mem_Read(_i2c_handle, i2c_address, register_vl_seconds, register_size, value, sizeof(value), i2c_timeout);
+    const HAL_StatusTypeDef ret = HAL_I2C_Mem_Read(_i2c_handle, i2c_read_address, register_vl_seconds, register_size, value, sizeof(value), i2c_timeout);
 
     if (ret != HAL_OK)
     {
@@ -75,7 +75,7 @@ bool PCF8563::Adjust(const DateTime& date_time)
     value[5] = DecToBcd(date_time.GetMonths());
     value[6] = DecToBcd(date_time.GetYears() - 2000);
 
-    const HAL_StatusTypeDef ret = HAL_I2C_Mem_Write(_i2c_handle, i2c_address, register_vl_seconds, register_size, value, sizeof(value), i2c_timeout);
+    const HAL_StatusTypeDef ret = HAL_I2C_Mem_Write(_i2c_handle, i2c_write_address, register_vl_seconds, register_size, value, sizeof(value), i2c_timeout);
 
     if (ret != HAL_OK)
     {

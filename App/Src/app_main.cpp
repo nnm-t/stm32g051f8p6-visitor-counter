@@ -34,5 +34,5 @@ void app_gpio_rising(const uint16_t gpio_pin)
 
 void app_uart_rx_complete(UART_HandleTypeDef* const huart)
 {
-
+    visitor_counter.UARTRXComplete(huart);
 }

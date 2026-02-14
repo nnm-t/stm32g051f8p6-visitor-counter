@@ -8,6 +8,8 @@
 class PCF8563
 {
     static constexpr const uint8_t i2c_address = 0x51;
+    static constexpr const uint8_t i2c_read_address = (i2c_address << 1) + 1;
+    static constexpr const uint8_t i2c_write_address = (i2c_address << 1) + 0;
     static constexpr const uint32_t i2c_timeout = 100;
 
     static constexpr const uint16_t register_size = 1;
