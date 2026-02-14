@@ -19,6 +19,8 @@ public:
 
     }
 
+    void Begin();
+
     void Update(const uint32_t delay_ms);
 
     bool Beep();

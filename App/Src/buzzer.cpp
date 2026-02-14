@@ -1,5 +1,10 @@
 #include "buzzer.h"
 
+void Buzzer::Begin()
+{
+    HAL_TIM_PWM_Stop(_timer_handler, _timer_channel);
+}
+
 void Buzzer::Update(const uint32_t delay_ms)
 {
     if (!_is_beep)
@@ -20,7 +25,7 @@ void Buzzer::Update(const uint32_t delay_ms)
 bool Buzzer::Beep()
 {
     const HAL_StatusTypeDef ret = HAL_TIM_PWM_Start(_timer_handler, _timer_channel);
-    _is_beep = false;
+    _is_beep = true;
     _beep_ms = 0;
 
     if (ret != HAL_OK)

@@ -94,6 +94,8 @@ void VisitorCounter::Print(const char* message)
 
 void VisitorCounter::Begin()
 {
+    _buzzer.Begin();
+
     Print("Startup...\n");
 
     // LED1 ON
@@ -139,6 +141,12 @@ void VisitorCounter::Begin()
     {
         char message[50];
         snprintf(message, sizeof(message), "%s is empty. Create new file.\n", file_name);
+        Print(message);
+    }
+    else
+    {
+        char message[38];
+        snprintf(message, sizeof(message), "Write data to %s.\n", file_name);
         Print(message);
     }
 
