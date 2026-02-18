@@ -1,204 +1,70 @@
 #include "fatfs_sd.h"
 
-#define bool            BYTE
-#define TRUE            1
-#define FALSE           0
-
-volatile uint16_t timer1;
-volatile uint16_t timer2;
-
-static volatile DSTATUS status = STA_NOINIT;
-static uint8_t card_type;
-static uint8_t power_flag = 0;
-
 static void SPI_cs_select()
 {
     HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_RESET);
-    HAL_Delay(1);
 }
 
 static void SPI_cs_deselect()
 {
-    HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_RESET);
-    HAL_Delay(1);
+    HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_SET);
 }
 
 static void SPI_tx_byte(uint8_t data)
 {
-    while(!__HAL_SPI_GET_FLAG(HSPI_SDCARD, SPI_FLAG_TXE))
-    {
-
-    }
-
-    HAL_SPI_Transmit(HSPI_SDCARD, &data, sizeof(data), SPI_TIMEOUT);
+    HAL_SPI_Transmit(HSPI_SDCARD, &data, 1, HAL_MAX_DELAY);
 }
 
 static void SPI_tx_buffer(uint8_t* buffer, uint16_t len)
 {
-    while(!__HAL_SPI_GET_FLAG(HSPI_SDCARD, SPI_FLAG_TXE))
-    {
-
-    }
-
-    HAL_SPI_Transmit(HSPI_SDCARD, buffer, len, SPI_TIMEOUT);
+    HAL_SPI_Transmit(HSPI_SDCARD, buffer, len, HAL_MAX_DELAY);
 }
 
 static uint8_t SPI_rx_byte()
 {
-    while(!__HAL_SPI_GET_FLAG(HSPI_SDCARD, SPI_FLAG_TXE))
-    {
-
-    }
-
-    uint8_t dummy = 0;
-    uint8_t data;
-    HAL_SPI_TransmitReceive(HSPI_SDCARD, &dummy, &data, 1, SPI_TIMEOUT);
+    uint8_t dummy = 0xFF;
+    uint8_t data = 0x00;
+    HAL_SPI_TransmitReceive(HSPI_SDCARD, &dummy, &data, 1, HAL_MAX_DELAY);
 
     return data;
 }
 
-static void SPI_rx_byte_ptr(uint8_t* buff)
+static void SPI_rx_buffer(uint8_t* buffer, uint16_t len)
 {
-    *buff = SPI_rx_byte();
+    for (uint16_t i = 0; i < len; i++)
+    {
+        buffer[i] = SPI_rx_byte();
+    }
 }
 
-static uint8_t SD_ready_wait()
+static SD_Status SD_ready_wait()
 {
-    timer2 = 500;
-
+    uint32_t timeout = HAL_GetTick() + 500;
     uint8_t res;
+
     do
     {
         res = SPI_rx_byte();
-    } while ((res != 0xFF) && timer2);
-
-    return res;
-}
-
-static void SD_power_on()
-{
-    SPI_cs_deselect();
-
-    for (int i= 0; i < 10; i++)
-    {
-        SPI_tx_byte(0xFF);
-    }
-
-    SPI_cs_select();
-
-    uint8_t args[6] = { CMD0, 0, 0, 0, 0, 0x95 };
-
-    SPI_tx_buffer(args, sizeof(args));
-
-    uint32_t count = 0x1FFFF;
-    while ((SPI_rx_byte() != 0x01) && count)
-    {
-        count--;
-    }
-
-    SPI_cs_deselect();
-    SPI_tx_byte(0xFF);
-
-    power_flag = 1;
-}
-
-static void SD_power_off()
-{
-    power_flag = 0;
-}
-
-static uint8_t SD_check_power()
-{
-    return power_flag;
-}
-
-static bool SD_rx_data_block(BYTE* buff, UINT len)
-{
-    timer1 = 200;
-
-    uint8_t token;
-    do
-    {
-        token = SPI_rx_byte();
-    } while ((token == 0xFF) && timer1);
-
-    if (token != 0xFE)
-    {
-        return FALSE;
-    }
-
-    while (len--)
-    {
-        SPI_rx_byte_ptr(buff++);
-    }
-
-    SPI_rx_byte();
-    SPI_rx_byte();
-
-    return TRUE;
-}
-
-#if _USE_WRITE == 1
-static bool SD_tx_data_block(const uint8_t* buff, BYTE token)
-{
-    if (SD_ready_wait() != 0xFF)
-    {
-        return FALSE;
-    }
-
-    SPI_tx_byte(token);
-
-    uint8_t resp = 0xFF;
-    if (token != 0xFD)
-    {
-        SPI_tx_buffer((uint8_t*)buff, 512);
-
-        SPI_rx_byte();
-        SPI_rx_byte();
-
-        uint8_t i = 0;
-        while (i <= 64)
+        if (res == 0xFF)
         {
-            resp = SPI_rx_byte();
-
-            if ((resp & 0x1F) == 0x05)
-            {
-                break;
-            }
-
-            i++;
+            return SD_OK;
         }
 
-        timer1 = 200;
-        while ((SPI_rx_byte() == 0) && timer1)
-        {
+    } while (HAL_GetTick() < timeout);
 
-        }
-    }
-
-    if ((resp & 0x1F) == 0x05)
-    {
-        return TRUE;
-    }
-
-    return FALSE;
+    return SD_ERROR;
 }
-#endif
 
 static BYTE SD_send_cmd(BYTE cmd, uint32_t arg)
 {
-    if (SD_ready_wait() != 0xFF)
-    {
-        return 0xFF;
-    }
-
+    SD_ready_wait();
     SPI_tx_byte(cmd);
     SPI_tx_byte((uint8_t)(arg >> 24));
     SPI_tx_byte((uint8_t)(arg >> 16));
     SPI_tx_byte((uint8_t)(arg >> 8));
     SPI_tx_byte((uint8_t)arg);
 
-    uint8_t crc;
+    uint8_t crc = 0x01;
     if (cmd == CMD0)
     {
         crc = 0x95;
@@ -207,348 +73,318 @@ static BYTE SD_send_cmd(BYTE cmd, uint32_t arg)
     {
         crc = 0x87;
     }
-    else
-    {
-        crc = 0x01;
-    }
 
     SPI_tx_byte(crc);
 
-    if (cmd == CMD12)
-    {
-        SPI_rx_byte();
-    }
-
-    uint8_t n = 10;
-    uint8_t res;
+    uint8_t retry = 0xFF;
+    uint8_t res = 0xFF;
     do
     {
         res = SPI_rx_byte();
-    } while ((res & 0x80) && --n);
+    } while ((res & 0x80) && --retry);
 
     return res;
 }
 
-DSTATUS SD_disk_initialize(BYTE drv)
+static uint8_t sdhc = 0;
+uint8_t card_initialized = 0;
+
+uint8_t sd_is_sdhc(void)
 {
+    return sdhc;
+}
 
-    if (drv)
-    {
-        return STA_NOINIT;
-    }
-
-    if (status & STA_NODISK)
-    {
-        return status;
-    }
-
-    SD_power_on();
-
-    SPI_cs_select();
-
-    uint8_t type = 0;
-
-    if (SD_send_cmd(CMD0, 0) == 1)
-    {
-        timer1 = 1000;
-
-        if (SD_send_cmd(CMD8, 0x1AA) == 1)
-        {
-            uint8_t ocr[4];
-            for (uint8_t n = 0; n < 4; n++)
-            {
-                ocr[n] = SPI_rx_byte();
-            }
-
-            if (ocr[2] == 0x01 && ocr[3] == 0xAA)
-            {
-                do
-                {
-                    if (SD_send_cmd(CMD55, 0) <= 1 && SD_send_cmd(CMD41, 1UL << 30) == 0)
-                    {
-                        break;
-                    }
-                } while (timer1);
-
-                if (timer1 && SD_send_cmd(CMD58, 0) == 0)
-                {
-                    for (uint8_t n = 0; n < 4; n++)
-                    {
-                        ocr[n] = SPI_rx_byte();
-                    }
-
-                    type = (ocr[0] & 0x40) ? CT_SD2 | CT_BLOCK : CT_SD2;
-                }
-            }
-        }
-        else
-        {
-            type = (SD_send_cmd(CMD55, 0) <= 1 && SD_send_cmd(CMD41, 0) <= 1) ? CT_SD1 : CT_MMC;
-
-            do
-            {
-                if (type == CT_SD1)
-                {
-                    if (SD_send_cmd(CMD55, 0) <= 1 && SD_send_cmd(CMD41, 0) == 0)
-                    {
-                        break;
-                    }
-                }
-                else
-                {
-                    if (SD_send_cmd(CMD1, 0) == 0)
-                    {
-                        break;
-                    }
-                }
-            } while (timer1);
-
-            if (!timer1 || SD_send_cmd(CMD16, 512) != 0)
-            {
-                type = 0;
-            }
-        }
-    }
-
-    card_type = type;
+SD_Status SD_spi_init(void)
+{
+    HAL_Delay(1);
 
     SPI_cs_deselect();
-    SPI_rx_byte();
-
-    if (type)
+    // 74クロック以上のダミークロックを送信
+    for (uint8_t i = 0; i < 10; i++)
     {
-        status &= ~STA_NOINIT;
-    }
-    else
-    {
-        SD_power_off();
+        SPI_tx_byte(0xFF);
     }
 
-    return status;
-}
-
-DSTATUS SD_disk_status(BYTE drv)
-{
-    if (drv)
+    BYTE cmd0_res = 0xFF;
+    uint32_t retry = HAL_GetTick() + 1000;
+    do
     {
-        return STA_NOINIT;
+        SPI_cs_select();
+        // ソフトウェアリセット
+        // todo: カードによっては0x01が返らない
+        cmd0_res = SD_send_cmd(CMD0, 0);
+        SPI_cs_deselect();
+        SPI_tx_byte(0xFF);
     }
-
-    return status;
-}
-
-DRESULT SD_disk_read(BYTE pdrv, BYTE* buff, DWORD sector, UINT count)
-{
-    if (pdrv || !count)
+    while (cmd0_res != 0x01 && HAL_GetTick() < retry);
+    
+    if (cmd0_res != 0x01)
     {
-        return RES_PARERR;
-    }
-
-    if (status & STA_NOINIT)
-    {
-        return RES_NOTRDY;
-    }
-
-    if (!(card_type & CT_BLOCK))
-    {
-        sector *= 512;
+        return SD_ERROR;
     }
 
     SPI_cs_select();
-
-    if (count == 1)
+    // カード電圧範囲等取得
+    BYTE cmd8_res = SD_send_cmd(CMD8, 0x1AA);
+    uint8_t r7[4];
+    for (uint8_t i = 0; i < 4; i++)
     {
-        if ((SD_send_cmd(CMD17, sector) == 0) && SD_rx_data_block(buff, 512))
-        {
-            count = 0;
-        }
+        r7[i] = SPI_rx_byte();
     }
-    else
-    {
-        if (SD_send_cmd(CMD18, sector) == 0)
-        {
-            do
-            {
-                if (!SD_rx_data_block(buff, 512))
-                {
-                    break;
-                }
-
-                buff += 512;
-            } while (--count);
-
-            SD_send_cmd(CMD12, 0);
-        }
-    }
-
     SPI_cs_deselect();
-    SPI_rx_byte();
+    SPI_tx_byte(0xFF);
 
-    return count ? RES_ERROR : RES_OK;
-}
-
-#if _USE_WRITE == 1
-DRESULT SD_disk_write(BYTE pdrv, const BYTE* buff, DWORD sector, UINT count)
-{
-    if (pdrv || !count)
+    sdhc = 0;
+    retry = HAL_GetTick() + 1000;
+    if (cmd8_res == 0x01 && r7[2] == 0x01 && r7[3] == 0xAA)
     {
-        return RES_PARERR;
-    }
-
-    if (status & STA_NOINIT)
-    {
-        return RES_NOTRDY;
-    }
-
-    if (status & STA_PROTECT)
-    {
-        return RES_WRPRT;
-    }
-
-    if (!(card_type & CT_BLOCK))
-    {
-        sector *= 512;
-    }
-
-    SPI_cs_select();
-
-    if (count == 1)
-    {
-        if ((SD_send_cmd(CMD24, sector) == 0) && SD_tx_data_block(buff, 0xFE))
+        BYTE acmd41_res = 0xFF;
+        // ループして応答を待つ
+        do
         {
-            count = 0;
-        }
-    }
-    else
-    {
-        if (card_type & CT_SD1)
+            SPI_cs_select();
+            // ACMD41の前にCMD55を送る
+            BYTE cmd55_res = SD_send_cmd(CMD55, 0);
+            // カード初期化
+            acmd41_res = SD_send_cmd(CMD41, 0x40000000);
+            SPI_cs_deselect();
+            SPI_tx_byte(0xFF);
+        } while (acmd41_res != 0x00 && HAL_GetTick() < retry);
+
+        if (acmd41_res != 0x00)
         {
-            SD_send_cmd(CMD55, 0);
-            SD_send_cmd(CMD23, count);
-        }
-
-        if (SD_send_cmd(CMD25, sector) == 0)
-        {
-            do
-            {
-                if (!SD_tx_data_block(buff, 0xFC))
-                {
-                    break;
-                }
-
-                buff += 512;
-            } while (--count);
-
-            if (!SD_tx_data_block(0, 0xFD))
-            {
-                count = 1;
-            }
-        }
-    }
-
-    SPI_cs_deselect();
-    SPI_rx_byte();
-
-    return count ? RES_ERROR : RES_OK;
-}
-#endif
-
-DRESULT SD_disk_ioctl(BYTE drv, BYTE ctrl, void* buff)
-{
-    if (drv)
-    {
-        return RES_PARERR;
-    }
-
-    DRESULT res = RES_ERROR;
-    uint8_t* ptr = buff;
-
-    if (ctrl == CTRL_POWER)
-    {
-        switch (*ptr)
-        {
-            case 0:
-                SD_power_off();
-                res = RES_OK;
-                break;
-            case 1:
-                SD_power_on();
-                res = RES_OK;
-                break;
-            case 2:
-                *(ptr + 1) = SD_check_power();
-                res = RES_OK;
-                break;
-            default:
-                res = RES_PARERR;
-                break;
-        }
-    }
-    else
-    {
-        if (status & STA_NOINIT)
-        {
-            return RES_NOTRDY;
+            return SD_ERROR;
         }
 
         SPI_cs_select();
-
-        uint8_t csd[16];
-        switch (ctrl)
+        // OCR取得
+        BYTE cmd58_res = SD_send_cmd(CMD58, 0);
+        uint8_t ocr[4];
+        for (uint8_t i = 0; i < 4; i++)
         {
-            case GET_SECTOR_COUNT:
-                if ((SD_send_cmd(CMD9, 0) == 0) && SD_rx_data_block(csd, 16))
-                {
-                    DWORD c_size = (DWORD)(csd[7] & 0x3F) << 16 | (WORD)csd[8] << 8 | csd[9];
-                    *(DWORD*)buff = (c_size + 1) << 10;
-                }
-                else
-                {
-                    uint8_t n = (csd[5] & 15) + ((csd[10] & 128) >> 7) + ((csd[9] & 3) << 1) + 2;
-                    WORD c_size = (csd[8] >> 6) + ((WORD) csd[7] << 2) + ((WORD) (csd[6] & 3) << 10) + 1;
-                    *(DWORD*)buff = (DWORD)c_size << (n - 9);
-                }
-
-                res = RES_OK;
-                break;
-            case GET_SECTOR_SIZE:
-                *(WORD*)buff = 512;
-                res = RES_OK;
-                break;
-            case CTRL_SYNC:
-                if (SD_ready_wait() == 0xFF)
-                {
-                    res = RES_OK;
-                }
-                break;
-            case MMC_GET_CSD:
-                if (SD_send_cmd(CMD9, 0) == 0&& SD_rx_data_block(ptr, 16))
-                {
-                    res = RES_OK;
-                }
-                break;
-            case MMC_GET_CID:
-                if (SD_send_cmd(CMD10, 0) == 0&& SD_rx_data_block(ptr, 16))
-                {
-                    res = RES_OK;
-                }
-                break;
-            case MMC_GET_OCR:
-            if (SD_send_cmd(CMD58, 0) == 0)
-            {
-                for (uint8_t n = 0; n < 4; n++)
-                {
-                    *ptr++ = SPI_rx_byte();
-                }
-
-                res = RES_OK;
-            }
-                break;
+            ocr[i] = SPI_rx_byte();
         }
-
         SPI_cs_deselect();
-        SPI_rx_byte();
+
+        if (ocr[0] & 0x40)
+        {
+            sdhc = 1;
+        }
+    }
+    else
+    {
+        BYTE acmd41_res = 0xFF;
+        do
+        {
+            SPI_cs_select();
+            BYTE cmd55_res = SD_send_cmd(CMD55, 0);
+            acmd41_res = SD_send_cmd(CMD41, 0x00);
+            SPI_cs_deselect();
+            SPI_tx_byte(0xFF);
+        }
+        while (acmd41_res != 0x00 && HAL_GetTick() < retry);
     }
 
-    return res;
+    card_initialized = 1;
+    return SD_OK;
+}
+
+SD_Status SD_disk_read_blocks(BYTE* buff, DWORD sector, UINT count)
+{
+    if (!count)
+    {
+        return SD_ERROR;
+    }
+
+    if (count == 1)
+    {
+        if (!sdhc)
+        {
+            sector *= 512;
+        }
+
+        SPI_cs_select();
+        BYTE cmd17_res = SD_send_cmd(CMD17, sector);
+        if (cmd17_res != 0x00)
+        {
+            SPI_cs_deselect();
+            return SD_ERROR;
+        }
+
+        uint8_t token;
+        uint32_t timeout = HAL_GetTick() + 200;
+        do
+        {
+            token = SPI_rx_byte();
+            if (token == 0xFE)
+            {
+                break;
+            }
+        }
+        while (HAL_GetTick() < timeout);
+
+        if (token != 0xFE)
+        {
+            SPI_cs_deselect();
+            return SD_ERROR;
+        }
+
+        SPI_rx_buffer(buff, 512);
+        SPI_rx_byte();
+        SPI_rx_byte();
+
+        SPI_cs_deselect();
+        SPI_tx_byte(0xFF);
+
+        return SD_OK;
+    }
+
+    return SD_disk_read_multi(buff, sector, count);
+}
+
+SD_Status SD_disk_read_multi(BYTE* buff, DWORD sector, UINT count)
+{
+    if (!count)
+    {
+        return SD_ERROR;
+    }
+
+    if (!sdhc)
+    {
+        sector *= 512;
+    }
+
+    SPI_cs_select();
+    BYTE cmd18_res = SD_send_cmd(CMD18, sector);
+    if (cmd18_res != 0x00)
+    {
+        SPI_cs_deselect();
+        return SD_ERROR;
+    }
+
+    while (count--)
+    {
+        uint8_t token;
+        uint32_t timeout = HAL_GetTick() + 200;
+
+        do
+        {
+            token = SPI_rx_byte();
+            if (token == 0xFE)
+            {
+                break;
+            }
+        }
+        while (HAL_GetTick() < timeout);
+
+        if (token != 0xFE)
+        {
+            SPI_cs_deselect();
+            return SD_ERROR;
+        }
+
+        SPI_rx_buffer(buff, 512);
+        SPI_rx_byte();
+        SPI_rx_byte();
+
+        buff += 512;
+    }
+
+    SD_send_cmd(CMD12, 0);
+    SPI_cs_deselect();
+    SPI_tx_byte(0xFF);
+
+    return SD_OK;
+}
+
+SD_Status SD_disk_write_blocks(const BYTE* buff, DWORD sector, UINT count)
+{
+    if (!count)
+    {
+        return SD_ERROR;
+    }
+
+    if (count == 1)
+    {
+        if (!sdhc)
+        {
+            sector *= 512;
+        }
+
+        SPI_cs_select();
+        BYTE cmd24_res = SD_send_cmd(CMD24, sector);
+        if (cmd24_res != 0x00)
+        {
+            SPI_cs_deselect();
+            return SD_ERROR;
+        }
+
+        SPI_tx_byte(0xFE);
+        SPI_tx_buffer((uint8_t*)buff, 512);
+        SPI_tx_byte(0xFF);
+        SPI_tx_byte(0xFF);
+
+        const uint8_t response = SPI_rx_byte();
+        if ((response & 0x1F) != 0x05)
+        {
+            SPI_cs_deselect();
+            return SD_ERROR;
+        }
+
+        while (SPI_rx_byte() == 0);
+
+        SPI_cs_deselect();
+        SPI_tx_byte(0xFF);
+
+        return SD_OK;
+    }
+
+    return SD_disk_write_multi(buff, sector, count);
+}
+
+SD_Status SD_disk_write_multi(const BYTE* buff, DWORD sector, UINT count)
+{
+    if (!count)
+    {
+        return SD_ERROR;
+    }
+
+    if (!sdhc)
+    {
+        sector *= 512;
+    }
+
+    SPI_cs_select();
+    BYTE cmd25_res = SD_send_cmd(CMD25, sector);
+    if (cmd25_res != 0x00)
+    {
+        SPI_cs_deselect();
+        return SD_ERROR;
+    }
+
+    while (count--)
+    {
+        SPI_tx_byte(0xFC);
+        SPI_tx_buffer((uint8_t*)buff, 512);
+        SPI_tx_byte(0xFF);
+        SPI_tx_byte(0xFF);
+
+        const uint8_t response = SPI_rx_byte();
+        if ((response & 0x1F) != 0x05)
+        {
+            SPI_cs_deselect();
+            return SD_ERROR;
+        }
+
+        while (SPI_rx_byte() == 0);
+        buff += 512;
+    }
+
+    SPI_tx_byte(0xFD);
+    while (SPI_rx_byte() == 0);
+
+    SPI_cs_deselect();
+    SPI_tx_byte(0xFF);
+
+    return SD_OK;
 }

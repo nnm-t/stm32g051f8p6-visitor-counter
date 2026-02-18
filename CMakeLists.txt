@@ -57,6 +57,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/Src/file.cpp
     App/Src/led.cpp
     FATFS/Target/fatfs_sd.c
+    FATFS/Target/sd_diskio.c
 )
 
 # Add include paths

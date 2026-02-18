@@ -129,16 +129,6 @@ void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
 
-  if (timer1 > 0)
-  {
-    timer1--;
-  }
-
-  if (timer2 > 0)
-  {
-    timer2--;
-  }
-
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */

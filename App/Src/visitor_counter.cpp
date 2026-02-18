@@ -7,7 +7,7 @@ void VisitorCounter::WriteCSVLine(const DateTime& date_time, const char* str)
         return;
     }
 
-    if (_file.IsEmpty())
+    if (!_file_opened)
     {
         return;
     }
@@ -16,7 +16,11 @@ void VisitorCounter::WriteCSVLine(const DateTime& date_time, const char* str)
     char csv_line[csv_line_len];
     snprintf(csv_line, sizeof(csv_line), "%02d:%02d:%02d,%s\n", date_time.GetHours(), date_time.GetMinutes(), date_time.GetSeconds(), str);
     // ファイル書き出し
-    _file.Puts(csv_line);
+    const int32_t res = _file.Puts(csv_line);
+
+    char message[20];
+    snprintf(message, sizeof(message), "Write %ld bytes.\n", res);
+    Print(message);
 }
 
 void VisitorCounter::ParseCommand()
@@ -139,16 +143,15 @@ void VisitorCounter::Begin()
 
     if (_file.IsEmpty())
     {
-        char message[50];
-        snprintf(message, sizeof(message), "%s is empty. Create new file.\n", file_name);
+        char message[41];
+        snprintf(message, sizeof(message), "File %s open failed.\n", file_name);
         Print(message);
+        return;
     }
-    else
-    {
-        char message[38];
-        snprintf(message, sizeof(message), "Write data to %s.\n", file_name);
-        Print(message);
-    }
+
+    char message[38];
+    snprintf(message, sizeof(message), "Write data to %s.\n", file_name);
+    Print(message);
 
     _file_opened = true;
 

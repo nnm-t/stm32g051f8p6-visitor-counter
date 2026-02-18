@@ -27,14 +27,19 @@
 #define CT_SDC              0x06
 #define CT_BLOCK            0x08
 
-DSTATUS SD_disk_initialize(BYTE pdrv);
-DSTATUS SD_disk_status(BYTE pdrv);
-DRESULT SD_disk_read(BYTE pdrv, BYTE* buff, DWORD sector, UINT count);
-DRESULT SD_disk_write(BYTE pdrv, const BYTE* buff, DWORD sector, UINT count);
-DRESULT SD_disk_ioctl(BYTE pdrv, BYTE cmd, void* buff);
+typedef enum {
+    SD_OK = 0,
+    SD_ERROR = 1
+} SD_Status;
 
-#define SPI_TIMEOUT 100
+SD_Status SD_spi_init(void);
+SD_Status SD_disk_read_blocks(BYTE* buff, DWORD sector, UINT count);
+SD_Status SD_disk_write_blocks(const BYTE* buff, DWORD sector, UINT count);
+SD_Status SD_disk_read_multi(BYTE* buff, DWORD sector, UINT count);
+SD_Status SD_disk_write_multi(const BYTE* buff, DWORD sector, UINT count);
+uint8_t sd_is_sdhc(void);
 
+extern uint8_t card_initialized;
 extern SPI_HandleTypeDef    hspi1;
 
 #define HSPI_SDCARD         &hspi1
