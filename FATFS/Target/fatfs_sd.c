@@ -96,8 +96,6 @@ uint8_t sd_is_sdhc(void)
 
 SD_Status SD_spi_init(void)
 {
-    HAL_Delay(1);
-
     SPI_cs_deselect();
     // 74クロック以上のダミークロックを送信
     for (uint8_t i = 0; i < 10; i++)
@@ -111,7 +109,6 @@ SD_Status SD_spi_init(void)
     {
         SPI_cs_select();
         // ソフトウェアリセット
-        // todo: カードによっては0x01が返らない
         cmd0_res = SD_send_cmd(CMD0, 0);
         SPI_cs_deselect();
         SPI_tx_byte(0xFF);
@@ -123,10 +120,12 @@ SD_Status SD_spi_init(void)
         return SD_ERROR;
     }
 
+    BYTE cmd8_res = 0xFF;
+    uint8_t r7[4];
+
     SPI_cs_select();
     // カード電圧範囲等取得
-    BYTE cmd8_res = SD_send_cmd(CMD8, 0x1AA);
-    uint8_t r7[4];
+    cmd8_res = SD_send_cmd(CMD8, 0x1AA);
     for (uint8_t i = 0; i < 4; i++)
     {
         r7[i] = SPI_rx_byte();
@@ -136,35 +135,54 @@ SD_Status SD_spi_init(void)
 
     sdhc = 0;
     retry = HAL_GetTick() + 1000;
+    // todo: カードによってはCMD8が失敗する模様
     if (cmd8_res == 0x01 && r7[2] == 0x01 && r7[3] == 0xAA)
     {
-        BYTE acmd41_res = 0xFF;
-        // ループして応答を待つ
-        do
-        {
-            SPI_cs_select();
-            // ACMD41の前にCMD55を送る
-            BYTE cmd55_res = SD_send_cmd(CMD55, 0);
-            // カード初期化
-            acmd41_res = SD_send_cmd(CMD41, 0x40000000);
-            SPI_cs_deselect();
-            SPI_tx_byte(0xFF);
-        } while (acmd41_res != 0x00 && HAL_GetTick() < retry);
-
-        if (acmd41_res != 0x00)
-        {
-            return SD_ERROR;
-        }
-
         SPI_cs_select();
-        // OCR取得
-        BYTE cmd58_res = SD_send_cmd(CMD58, 0);
+        // 先にOCR取得
+        SD_send_cmd(CMD58, 0);
         uint8_t ocr[4];
         for (uint8_t i = 0; i < 4; i++)
         {
             ocr[i] = SPI_rx_byte();
         }
         SPI_cs_deselect();
+        SPI_tx_byte(0xFF);
+
+        // ACMD41のArgumentにOCRの値を乗せる
+        DWORD acmd41_arg = 0x40000000 | (ocr[3] << 16) | (ocr[2] << 8);
+        BYTE acmd41_res = 0xFF;
+        // ループして応答を待つ
+        do
+        {
+            SPI_cs_select();
+            // ACMD41の前にCMD55を送る
+            SD_send_cmd(CMD55, 0);
+            SPI_cs_deselect();
+            SPI_tx_byte(0xFF);
+
+            SPI_cs_select();
+            // カード初期化
+            acmd41_res = SD_send_cmd(CMD41, acmd41_arg);
+            SPI_cs_deselect();
+            SPI_tx_byte(0xFF);
+        } while (acmd41_res != 0x00 && HAL_GetTick() < retry);
+
+        if (acmd41_res != 0x00)
+        {
+            // タイムアウト
+            return SD_ERROR;
+        }
+
+        SPI_cs_select();
+        // OCR取得
+        SD_send_cmd(CMD58, 0);
+        for (uint8_t i = 0; i < 4; i++)
+        {
+            ocr[i] = SPI_rx_byte();
+        }
+        SPI_cs_deselect();
+        SPI_tx_byte(0xFF);
 
         if (ocr[0] & 0x40)
         {
@@ -177,7 +195,7 @@ SD_Status SD_spi_init(void)
         do
         {
             SPI_cs_select();
-            BYTE cmd55_res = SD_send_cmd(CMD55, 0);
+            SD_send_cmd(CMD55, 0);
             acmd41_res = SD_send_cmd(CMD41, 0x00);
             SPI_cs_deselect();
             SPI_tx_byte(0xFF);
