@@ -1,5 +1,7 @@
 #include "fatfs_sd.h"
 
+#include <string.h>
+
 static void SPI_cs_select()
 {
     HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_RESET);
@@ -12,19 +14,19 @@ static void SPI_cs_deselect()
 
 static void SPI_tx_byte(uint8_t data)
 {
-    HAL_SPI_Transmit(HSPI_SDCARD, &data, 1, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(HSPI_SDCARD, &data, 1, 100);
 }
 
 static void SPI_tx_buffer(uint8_t* buffer, uint16_t len)
 {
-    HAL_SPI_Transmit(HSPI_SDCARD, buffer, len, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(HSPI_SDCARD, buffer, len, 100);
 }
 
 static uint8_t SPI_rx_byte()
 {
     uint8_t dummy = 0xFF;
     uint8_t data = 0x00;
-    HAL_SPI_TransmitReceive(HSPI_SDCARD, &dummy, &data, 1, HAL_MAX_DELAY);
+    HAL_SPI_TransmitReceive(HSPI_SDCARD, &dummy, &data, 1, 100);
 
     return data;
 }
@@ -135,7 +137,6 @@ SD_Status SD_spi_init(void)
 
     sdhc = 0;
     retry = HAL_GetTick() + 1000;
-    // todo: カードによってはCMD8が失敗する模様
     if (cmd8_res == 0x01 && r7[2] == 0x01 && r7[3] == 0xAA)
     {
         SPI_cs_select();
@@ -222,6 +223,7 @@ SD_Status SD_disk_read_blocks(BYTE* buff, DWORD sector, UINT count)
         }
 
         SPI_cs_select();
+        // todo: CMD17で読み出す先頭セクタの値がおかしい (ビットずれではない)
         BYTE cmd17_res = SD_send_cmd(CMD17, sector);
         if (cmd17_res != 0x00)
         {
